@@ -20,43 +20,14 @@ Extended Modules:
 
 from vortexchain.manifold import TopologicalManifold, WrappingNumber
 from vortexchain.toac import TOACKeypair, TopologicalHash, TopologicalSignature
-from vortexchain.chain import Block, Transaction, VortexChain
-from vortexchain.consensus import ProofOfTopology, HybridConsensus
-from vortexchain.tokenomics import VortexToken, TokenDistribution
-from vortexchain.contracts import QuditVM, QuditContract, Instruction, QuditOpcode
-from vortexchain.qkd import QKDSession, TopoQKDNode, EntangledOAMPair
-from vortexchain.oracle import EntropyAggregator, OracleNode, EntropyRequest
-from vortexchain.network import VortexNode, VortexNetwork, MessageType
 from vortexchain.nft import TopoNFT, TopoNFTCollection, TopologicalFingerprint, fuse_nfts
 
 __all__ = [
-    # Core
     "TopologicalManifold",
     "WrappingNumber",
     "TOACKeypair",
     "TopologicalHash",
     "TopologicalSignature",
-    "Block",
-    "Transaction",
-    "VortexChain",
-    "ProofOfTopology",
-    "HybridConsensus",
-    "VortexToken",
-    "TokenDistribution",
-    # Extended
-    "QuditVM",
-    "QuditContract",
-    "Instruction",
-    "QuditOpcode",
-    "QKDSession",
-    "TopoQKDNode",
-    "EntangledOAMPair",
-    "EntropyAggregator",
-    "OracleNode",
-    "EntropyRequest",
-    "VortexNode",
-    "VortexNetwork",
-    "MessageType",
     "TopoNFT",
     "TopoNFTCollection",
     "TopologicalFingerprint",

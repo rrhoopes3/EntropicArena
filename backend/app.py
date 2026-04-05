@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 
 # Add backend dir to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -40,6 +41,15 @@ wallets: Dict[str, PlayerWallet] = {}             # player_addr → wallet
 active_battles: Dict[str, object] = {}            # player_addr → BattleState
 
 DEFAULT_PLAYER = "player_1"
+
+# ---------------------------------------------------------------------------
+# Genesis Airdrop — free tokens for the first 24 hours
+# ---------------------------------------------------------------------------
+
+GENESIS_START = time.time()
+GENESIS_WINDOW = 86400       # 24 hours in seconds
+GENESIS_AMOUNT = 2000        # free $VORTEX per player
+airdrop_claims: Dict[str, bool] = {}  # player_addr → claimed
 
 
 def get_wallet(player: str) -> PlayerWallet:
@@ -285,6 +295,48 @@ def api_wallet_credit():
     wallet = get_wallet(player)
     wallet.credit(amount, "dev_credit")
     return jsonify(wallet.to_dict())
+
+
+# ---------------------------------------------------------------------------
+# Routes: Genesis Airdrop
+# ---------------------------------------------------------------------------
+
+@app.route("/api/airdrop/status", methods=["GET"])
+def api_airdrop_status():
+    """Check genesis airdrop status."""
+    player = request.args.get("player", DEFAULT_PLAYER)
+    elapsed = time.time() - GENESIS_START
+    remaining = max(0, GENESIS_WINDOW - elapsed)
+    return jsonify({
+        "active": remaining > 0,
+        "seconds_remaining": round(remaining),
+        "claimed": airdrop_claims.get(player, False),
+        "amount": GENESIS_AMOUNT,
+    })
+
+
+@app.route("/api/airdrop/claim", methods=["POST"])
+def api_airdrop_claim():
+    """Claim genesis airdrop tokens."""
+    data = request.json or {}
+    player = data.get("player", DEFAULT_PLAYER)
+
+    elapsed = time.time() - GENESIS_START
+    if elapsed > GENESIS_WINDOW:
+        return jsonify({"error": "Genesis window has ended"}), 400
+
+    if airdrop_claims.get(player):
+        return jsonify({"error": "Already claimed"}), 400
+
+    wallet = get_wallet(player)
+    wallet.credit(GENESIS_AMOUNT, "genesis_airdrop")
+    airdrop_claims[player] = True
+
+    return jsonify({
+        "success": True,
+        "amount": GENESIS_AMOUNT,
+        "wallet": wallet.to_dict(),
+    })
 
 
 # ---------------------------------------------------------------------------

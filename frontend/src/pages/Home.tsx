@@ -1,40 +1,36 @@
 import { useState, useEffect } from "react";
-import { EntityCard } from "../components/EntityCard";
+import EntityCard from "../components/EntityCard";
+import AirdropBanner from "../components/AirdropBanner";
 import { getEntities, getWallet, mintEntity, getHealth } from "../services/api";
-import { colors } from "../constants/theme";
 
-export function Home() {
+export default function Home() {
   const [entities, setEntities] = useState<any[]>([]);
   const [wallet, setWallet] = useState<any>(null);
   const [health, setHealth] = useState<any>(null);
   const [minting, setMinting] = useState(false);
   const [error, setError] = useState("");
 
-  const refresh = async () => {
-    try {
-      const [entRes, walRes, hRes] = await Promise.all([
-        getEntities(),
-        getWallet(),
-        getHealth(),
-      ]);
-      setEntities(entRes.entities);
-      setWallet(walRes);
-      setHealth(hRes);
-      setError("");
-    } catch (e: any) {
-      setError(e.message);
-    }
+  const loadData = () => {
+    Promise.all([getEntities(), getWallet(), getHealth()])
+      .then(([e, w, h]) => {
+        setEntities(e.entities);
+        setWallet(w);
+        setHealth(h);
+        setError("");
+      })
+      .catch((e) => setError(e.message));
   };
 
   useEffect(() => {
-    refresh();
+    loadData();
   }, []);
 
   const handleMint = async () => {
     setMinting(true);
+    setError("");
     try {
       await mintEntity();
-      await refresh();
+      loadData();
     } catch (e: any) {
       setError(e.message);
     }
@@ -42,108 +38,84 @@ export function Home() {
   };
 
   return (
-    <div style={{ padding: 32, maxWidth: 1200, margin: "0 auto" }}>
-      {/* Header */}
-      <div style={{ textAlign: "center", marginBottom: 48 }}>
-        <h1 style={{ fontSize: 48, fontWeight: 800, color: colors.primary, margin: 0, letterSpacing: 2 }}>
-          ENTROPIC ARENA
-        </h1>
-        <p style={{ color: colors.textSecondary, marginTop: 8 }}>
-          Mint soliton entities. Evolve through fusion. Battle entropic parasites.
+    <div>
+      {/* Hero */}
+      <div className="hero">
+        <h1 className="hero-title">ENTROPIC ARENA</h1>
+        <p className="hero-subtitle">
+          Mint soliton entities from the quantum condensate. Evolve through
+          topological fusion. Battle entropic parasites in the arena.
         </p>
         {health && (
-          <p style={{ color: colors.textMuted, fontSize: 12 }}>
-            {health.entities_count} entities minted · {health.active_battles} active battles
-          </p>
+          <div className="status-bar">
+            <span>
+              <span className="status-dot" />
+              ONLINE
+            </span>
+            <span>{health.entities_count} entities minted</span>
+            <span>{health.active_battles} active battles</span>
+          </div>
         )}
       </div>
 
+      {/* Genesis Airdrop */}
+      <AirdropBanner onClaim={loadData} />
+
       {/* Wallet */}
       {wallet && (
-        <div style={{
-          background: colors.surface,
-          border: `1px solid ${colors.border}`,
-          borderRadius: 16,
-          padding: 20,
-          marginBottom: 32,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}>
+        <div className="wallet-panel glass">
           <div>
-            <div style={{ fontSize: 12, color: colors.textMuted, textTransform: "uppercase", letterSpacing: 1 }}>
-              $VORTEX Balance
-            </div>
-            <div style={{ fontSize: 32, fontWeight: 700, color: colors.primary }}>
+            <div className="wallet-balance">
               {wallet.balance.toFixed(0)}
+              <small> $VORTEX</small>
             </div>
           </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 12, color: colors.textMuted }}>
-              Earned: {wallet.total_earned.toFixed(0)} · Spent: {wallet.total_spent.toFixed(0)}
+          <div className="wallet-stat">
+            <div className="wallet-stat-value" style={{ color: "var(--success)" }}>
+              +{wallet.total_earned.toFixed(0)}
             </div>
+            <div className="wallet-stat-label">Earned</div>
+          </div>
+          <div className="wallet-stat">
+            <div className="wallet-stat-value" style={{ color: "var(--danger)" }}>
+              -{wallet.total_spent.toFixed(0)}
+            </div>
+            <div className="wallet-stat-label">Spent</div>
           </div>
         </div>
       )}
 
-      {/* Error */}
-      {error && (
-        <div style={{
-          background: `${colors.danger}20`,
-          border: `1px solid ${colors.danger}`,
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 24,
-          color: colors.danger,
-        }}>
-          {error}
-        </div>
-      )}
-
-      {/* Actions */}
-      <div style={{ display: "flex", gap: 16, marginBottom: 32 }}>
-        <button
-          onClick={handleMint}
-          disabled={minting}
-          style={{
-            background: colors.primary,
-            color: colors.bg,
-            border: "none",
-            borderRadius: 12,
-            padding: "14px 32px",
-            fontSize: 16,
-            fontWeight: 700,
-            cursor: minting ? "wait" : "pointer",
-            opacity: minting ? 0.7 : 1,
-          }}
-        >
-          {minting ? "Minting..." : "Mint Entity (25 $VORTEX)"}
+      {/* Mint */}
+      <div style={{ textAlign: "center", margin: "28px 0" }}>
+        <button className="btn btn-gold" onClick={handleMint} disabled={minting}>
+          {minting ? "Minting..." : "Mint Entity \u2014 25 $VORTEX"}
         </button>
       </div>
 
-      {/* Entity Grid */}
-      <h2 style={{ color: colors.text, fontSize: 20, marginBottom: 16 }}>
-        Your Soliton Entities ({entities.length})
-      </h2>
+      {error && <div className="error-banner">{error}</div>}
 
-      {entities.length === 0 ? (
-        <div style={{
-          textAlign: "center",
-          padding: 64,
-          color: colors.textMuted,
-        }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>🔮</div>
-          <p>No entities yet. Mint your first soliton configuration from the condensate.</p>
-        </div>
+      {/* Entity Grid */}
+      {entities.length > 0 ? (
+        <>
+          <div className="section-header">
+            <span className="section-title">Your Entities</span>
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+              {entities.length} owned
+            </span>
+          </div>
+          <div className="entity-grid">
+            {entities.map((e: any) => (
+              <EntityCard key={e.token_id} entity={e} />
+            ))}
+          </div>
+        </>
       ) : (
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
-          gap: 16,
-        }}>
-          {entities.map((entity: any) => (
-            <EntityCard key={entity.token_id} entity={entity} />
-          ))}
+        <div className="empty-state">
+          <div className="empty-state-icon">&#9671;</div>
+          <div className="empty-state-text">
+            No entities yet. Mint your first soliton entity from the quantum
+            condensate to begin your journey.
+          </div>
         </div>
       )}
     </div>

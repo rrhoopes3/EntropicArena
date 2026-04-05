@@ -1,130 +1,119 @@
-import { elementColors, colors } from "../constants/theme";
+import type { CSSProperties } from "react";
+import CreatureCanvas from "./CreatureCanvas";
 
-interface EntityStats {
-  defense: number;
-  hp: number;
-  max_hp: number;
-  speed: number;
-  attack: number;
-  special: number;
-  element: string;
-  eta: number;
-  rarity: string;
-  rarity_score: number;
-  level: number;
-  xp: number;
-  power_rating: number;
-}
+const ELEMENT_COLORS: Record<string, string> = {
+  Coherence: "var(--el-coherence)",
+  Amplitude: "var(--el-amplitude)",
+  Phase: "var(--el-phase)",
+  Entropy: "var(--el-entropy)",
+  Topology: "var(--el-topology)",
+  Void: "var(--el-void)",
+  Prime: "var(--el-prime)",
+};
 
-interface Entity {
-  token_id: string;
-  name: string;
-  stats: EntityStats;
-  generation: number;
-  battle_count: number;
-  wins: number;
-  losses: number;
-  genes: number[];
-}
+const RARITY_COLORS: Record<string, string> = {
+  Common: "#7a7a9a",
+  Uncommon: "#00e088",
+  Rare: "#4ac8ff",
+  Epic: "#a855f7",
+  Legendary: "#ff9500",
+  Mythic: "#ff3860",
+};
+
+const STAT_COLORS: Record<string, string> = {
+  ATK: "var(--danger)",
+  DEF: "var(--info)",
+  HP: "var(--success)",
+  SPD: "var(--el-phase)",
+  SPC: "var(--gold)",
+};
 
 interface Props {
-  entity: Entity;
+  entity: any;
   onClick?: () => void;
   selected?: boolean;
 }
 
-const rarityColors: Record<string, string> = {
-  Common: "#6b7280",
-  Uncommon: "#22c55e",
-  Rare: "#3b82f6",
-  Epic: "#a855f7",
-  Legendary: "#f59e0b",
-  Mythic: "#ef4444",
-};
+export default function EntityCard({ entity, onClick, selected }: Props) {
+  const s = entity.stats;
+  const elColor = ELEMENT_COLORS[s.element] || "var(--accent)";
+  const rarColor = RARITY_COLORS[s.rarity] || "var(--text-muted)";
+  const rarityClass = `rarity-${s.rarity.toLowerCase()}`;
 
-export function EntityCard({ entity, onClick, selected }: Props) {
-  const { stats } = entity;
-  const elColor = elementColors[stats.element] || colors.text;
-  const rarColor = rarityColors[stats.rarity] || colors.textMuted;
+  const stats = [
+    { label: "ATK", value: s.attack },
+    { label: "DEF", value: s.defense },
+    { label: "HP", value: s.hp },
+    { label: "SPD", value: s.speed },
+    { label: "SPC", value: s.special },
+  ];
 
   return (
     <div
+      className={`entity-card ${rarityClass} ${selected ? "selected" : ""}`}
+      style={{ "--element-color": elColor, "--rarity-color": rarColor } as CSSProperties}
       onClick={onClick}
-      style={{
-        background: colors.surface,
-        border: `2px solid ${selected ? colors.primary : colors.border}`,
-        borderRadius: 16,
-        padding: 20,
-        cursor: onClick ? "pointer" : "default",
-        transition: "all 0.2s",
-        minWidth: 280,
-      }}
     >
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: colors.text }}>{entity.name}</div>
-          <div style={{ fontSize: 12, color: rarColor, fontWeight: 600 }}>
-            {stats.rarity} · Gen {entity.generation}
-          </div>
-        </div>
-        <div style={{
-          background: `${elColor}20`,
-          color: elColor,
-          padding: "4px 10px",
-          borderRadius: 8,
-          fontSize: 12,
-          fontWeight: 700,
-        }}>
-          {stats.element}
+      {/* Creature Portrait */}
+      <div className="creature-frame">
+        <CreatureCanvas
+          genes={entity.genes}
+          element={s.element}
+          rarity={s.rarity}
+          size={130}
+        />
+      </div>
+
+      {/* Name + Badges */}
+      <div style={{ textAlign: "center", marginBottom: 12 }}>
+        <div className="entity-name">{entity.name}</div>
+        <div className="entity-meta" style={{ justifyContent: "center" }}>
+          <span className="badge badge-element" style={{ "--element-color": elColor } as CSSProperties}>
+            {s.element}
+          </span>
+          <span className="badge badge-rarity" style={{ "--rarity-color": rarColor } as CSSProperties}>
+            {s.rarity}
+          </span>
+          {entity.generation > 0 && <span className="badge">Gen {entity.generation}</span>}
         </div>
       </div>
 
-      {/* η and Power */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
-        <div style={{ flex: 1, textAlign: "center" }}>
-          <div style={{ fontSize: 24, fontWeight: 200, color: colors.text, fontVariantNumeric: "tabular-nums" }}>
-            {stats.eta.toFixed(4)}
-          </div>
-          <div style={{ fontSize: 10, color: colors.textMuted, textTransform: "uppercase", letterSpacing: 1 }}>η</div>
+      {/* Key Stats */}
+      <div className="entity-key-stats">
+        <div className="key-stat">
+          <div className="key-stat-value" style={{ color: elColor }}>{s.eta.toFixed(4)}</div>
+          <div className="key-stat-label">eta</div>
         </div>
-        <div style={{ flex: 1, textAlign: "center" }}>
-          <div style={{ fontSize: 24, fontWeight: 700, color: colors.primary }}>
-            {stats.power_rating}
-          </div>
-          <div style={{ fontSize: 10, color: colors.textMuted, textTransform: "uppercase", letterSpacing: 1 }}>Power</div>
+        <div className="key-stat">
+          <div className="key-stat-value">{s.power_rating}</div>
+          <div className="key-stat-label">Power</div>
         </div>
-        <div style={{ flex: 1, textAlign: "center" }}>
-          <div style={{ fontSize: 24, fontWeight: 600, color: colors.info }}>
-            Lv.{stats.level}
-          </div>
-          <div style={{ fontSize: 10, color: colors.textMuted, textTransform: "uppercase", letterSpacing: 1 }}>Level</div>
+        <div className="key-stat">
+          <div className="key-stat-value" style={{ color: "var(--gold)" }}>{s.level}</div>
+          <div className="key-stat-label">Level</div>
         </div>
       </div>
 
       {/* Stat Bars */}
-      {[
-        { label: "ATK", value: stats.attack, color: "#ff6b6b" },
-        { label: "DEF", value: stats.defense, color: "#4ac8ff" },
-        { label: "HP", value: stats.hp, color: "#00e088" },
-        { label: "SPD", value: stats.speed, color: "#a855f7" },
-        { label: "SPC", value: stats.special, color: "#ffd700" },
-      ].map(({ label, value, color }) => (
-        <div key={label} style={{ display: "flex", alignItems: "center", marginBottom: 6, gap: 8 }}>
-          <div style={{ width: 30, fontSize: 10, color: colors.textMuted, fontWeight: 600 }}>{label}</div>
-          <div style={{ flex: 1, height: 6, background: colors.surfaceElevated, borderRadius: 3, overflow: "hidden" }}>
-            <div style={{ width: `${value}%`, height: "100%", background: color, borderRadius: 3 }} />
+      {stats.map((stat) => (
+        <div className="stat-row" key={stat.label}>
+          <span className="stat-label">{stat.label}</span>
+          <div className="stat-bar-track">
+            <div
+              className="stat-bar-fill"
+              style={{ width: `${stat.value}%`, "--stat-color": STAT_COLORS[stat.label] } as CSSProperties}
+            />
           </div>
-          <div style={{ width: 24, fontSize: 11, color: colors.textSecondary, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-            {value}
-          </div>
+          <span className="stat-value">{stat.value}</span>
         </div>
       ))}
 
-      {/* Battle record */}
+      {/* Battle Record */}
       {entity.battle_count > 0 && (
-        <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 8, textAlign: "center" }}>
-          {entity.wins}W / {entity.losses}L ({entity.battle_count} battles)
+        <div style={{ marginTop: 10, fontSize: 11, color: "var(--text-muted)", textAlign: "center", fontFamily: "var(--font-display)", letterSpacing: "1px" }}>
+          <span style={{ color: "var(--success)" }}>{entity.wins}W</span>
+          {" / "}
+          <span style={{ color: "var(--danger)" }}>{entity.losses}L</span>
         </div>
       )}
     </div>

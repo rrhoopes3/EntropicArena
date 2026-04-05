@@ -1,6 +1,6 @@
 // API client for Entropic Arena backend
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = "/api";
 
 async function fetchJSON(path: string, options?: RequestInit) {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -66,6 +66,13 @@ export const creditWallet = (amount: number, player = "player_1") =>
     method: "POST",
     body: JSON.stringify({ player, amount }),
   });
+
+// Airdrop
+export const getAirdropStatus = (player = "player_1") =>
+  fetchJSON(`/airdrop/status?player=${player}`);
+
+export const claimAirdrop = (player = "player_1") =>
+  fetchJSON("/airdrop/claim", { method: "POST", body: JSON.stringify({ player }) });
 
 // Health
 export const getHealth = () => fetchJSON("/health");

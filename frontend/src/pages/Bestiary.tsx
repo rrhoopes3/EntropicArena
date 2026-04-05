@@ -1,98 +1,120 @@
 import { useState, useEffect } from "react";
 import { getBestiary } from "../services/api";
-import { colors } from "../constants/theme";
 
-export function Bestiary() {
+const TIER_NAMES: Record<number, string> = {
+  1: "Tier I \u2014 Etheric",
+  2: "Tier II \u2014 Astral",
+  3: "Tier III \u2014 Dual (Boss)",
+};
+
+const ELEMENT_COLORS: Record<string, string> = {
+  Coherence: "var(--el-coherence)",
+  Amplitude: "var(--el-amplitude)",
+  Phase: "var(--el-phase)",
+  Entropy: "var(--el-entropy)",
+  Topology: "var(--el-topology)",
+  Void: "var(--el-void)",
+  Prime: "var(--el-prime)",
+};
+
+export default function Bestiary() {
   const [parasites, setParasites] = useState<any[]>([]);
 
   useEffect(() => {
-    getBestiary().then((res) => setParasites(res.parasites));
+    getBestiary()
+      .then((r) => setParasites(r.parasites))
+      .catch(() => {});
   }, []);
 
-  const tierNames: Record<number, string> = {
-    1: "Etheric (Tier 1)",
-    2: "Astral (Tier 2)",
-    3: "Dual — Boss (Tier 3)",
-  };
-
-  const grouped = parasites.reduce<Record<number, any[]>>((acc, p) => {
-    if (!acc[p.tier]) acc[p.tier] = [];
-    acc[p.tier].push(p);
-    return acc;
-  }, {});
+  const tiers = [1, 2, 3];
 
   return (
-    <div style={{ padding: 32, maxWidth: 900, margin: "0 auto" }}>
-      <h1 style={{ color: colors.primary, fontSize: 36, fontWeight: 800, textAlign: "center" }}>
-        Parasite Bestiary
-      </h1>
-      <p style={{ color: colors.textSecondary, textAlign: "center", marginBottom: 32 }}>
-        Entropic parasites classified by astral level. Know your enemy.
-      </p>
+    <div>
+      <div className="bestiary-header">
+        <h1 className="bestiary-title">BESTIARY</h1>
+        <p style={{ color: "var(--text-secondary)", marginTop: 8, fontSize: 14 }}>
+          Entropic parasites of the nested condensate. Know your enemy.
+        </p>
+      </div>
 
-      {Object.entries(grouped).sort(([a], [b]) => Number(a) - Number(b)).map(([tier, parasiteList]) => (
-        <div key={tier} style={{ marginBottom: 32 }}>
-          <h2 style={{ color: colors.danger, fontSize: 18, marginBottom: 12 }}>
-            {tierNames[Number(tier)] || `Tier ${tier}`}
-          </h2>
-
-          {parasiteList.map((p: any) => (
-            <div key={p.name} style={{
-              background: colors.surface,
-              border: `1px solid ${colors.border}`,
-              borderRadius: 16,
-              padding: 20,
-              marginBottom: 12,
-            }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                <div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: colors.text }}>{p.name}</div>
-                  <div style={{ fontSize: 13, color: colors.textSecondary, marginTop: 4 }}>{p.description}</div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ color: colors.danger, fontWeight: 600 }}>η = {p.eta}</div>
-                  <div style={{ fontSize: 11, color: colors.success }}>Reward: {p.vortex_reward} $V</div>
-                </div>
-              </div>
-
-              {/* Stats */}
-              <div style={{ display: "flex", gap: 16, marginBottom: 12, fontSize: 12 }}>
-                <span style={{ color: colors.textMuted }}>HP <span style={{ color: colors.text }}>{p.hp}</span></span>
-                <span style={{ color: colors.textMuted }}>ATK <span style={{ color: colors.text }}>{p.attack}</span></span>
-                <span style={{ color: colors.textMuted }}>DEF <span style={{ color: colors.text }}>{p.defense}</span></span>
-                <span style={{ color: colors.textMuted }}>SPD <span style={{ color: colors.text }}>{p.speed}</span></span>
-                <span style={{ color: colors.textMuted }}>Weak: <span style={{ color: colors.warning }}>{p.weakness}</span></span>
-              </div>
-
-              {/* Lore */}
-              <div style={{
-                background: colors.surfaceElevated,
-                borderRadius: 8,
-                padding: 12,
-                fontSize: 12,
-                color: colors.textMuted,
-                fontStyle: "italic",
-                lineHeight: 1.6,
-                marginBottom: 12,
-              }}>
-                {p.lore}
-              </div>
-
-              {/* Attacks */}
-              <div style={{ fontSize: 12 }}>
-                <div style={{ color: colors.textMuted, fontWeight: 600, marginBottom: 4 }}>Attacks:</div>
-                {p.attacks.map((a: any, i: number) => (
-                  <div key={i} style={{ color: colors.textSecondary, marginBottom: 2 }}>
-                    <span style={{ color: colors.danger }}>{a.name}</span>
-                    <span style={{ color: colors.textMuted }}> — {a.damage} dmg — </span>
-                    <span>{a.description}</span>
+      {tiers.map((tier) => {
+        const tierParasites = parasites.filter((p) => p.tier === tier);
+        if (tierParasites.length === 0) return null;
+        return (
+          <div key={tier} className="tier-section">
+            <div className="tier-label">{TIER_NAMES[tier]}</div>
+            {tierParasites.map((p) => (
+              <div key={p.name} className="parasite-card glass">
+                <div className="parasite-header">
+                  <div>
+                    <span className="parasite-name">{p.name}</span>
+                    <span className="parasite-eta">
+                      {"\u03B7"} {p.eta}
+                    </span>
                   </div>
-                ))}
+                  <div className="parasite-reward">+{p.vortex_reward} $VORTEX</div>
+                </div>
+
+                <div className="parasite-desc">{p.description}</div>
+
+                <div className="parasite-stats">
+                  <div className="parasite-stat">
+                    <div className="parasite-stat-value" style={{ color: "var(--success)" }}>
+                      {p.hp}
+                    </div>
+                    <div className="parasite-stat-label">HP</div>
+                  </div>
+                  <div className="parasite-stat">
+                    <div className="parasite-stat-value" style={{ color: "var(--danger)" }}>
+                      {p.attack}
+                    </div>
+                    <div className="parasite-stat-label">ATK</div>
+                  </div>
+                  <div className="parasite-stat">
+                    <div className="parasite-stat-value" style={{ color: "var(--info)" }}>
+                      {p.defense}
+                    </div>
+                    <div className="parasite-stat-label">DEF</div>
+                  </div>
+                  <div className="parasite-stat">
+                    <div className="parasite-stat-value" style={{ color: "var(--el-phase)" }}>
+                      {p.speed}
+                    </div>
+                    <div className="parasite-stat-label">SPD</div>
+                  </div>
+                  <div className="parasite-stat">
+                    <div
+                      className="parasite-stat-value"
+                      style={{
+                        color: ELEMENT_COLORS[p.weakness] || "var(--warning)",
+                      }}
+                    >
+                      {p.weakness}
+                    </div>
+                    <div className="parasite-stat-label">Weakness</div>
+                  </div>
+                </div>
+
+                {p.lore && <div className="parasite-lore">{p.lore}</div>}
+
+                {p.attacks && p.attacks.length > 0 && (
+                  <div className="parasite-attacks">
+                    {p.attacks.map((a: any, i: number) => (
+                      <div key={i} className="parasite-attack">
+                        <span className="attack-name">{a.name}</span>
+                        <span className="attack-dmg">{a.damage} dmg</span>
+                        <span className="attack-desc">{a.description}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
-        </div>
-      ))}
+            ))}
+          </div>
+        );
+      })}
+
+      {parasites.length === 0 && <div className="loading">Loading bestiary...</div>}
     </div>
   );
 }

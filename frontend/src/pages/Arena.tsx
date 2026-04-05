@@ -1,14 +1,51 @@
-import { useState, useEffect } from "react";
-import { getEntities, getBestiary, startBattle, battleAction } from "../services/api";
-import { colors } from "../constants/theme";
+import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  getEntities,
+  getBestiary,
+  startBattle,
+  battleAction,
+} from "../services/api";
+import CreatureCanvas, { parasiteGenes } from "../components/CreatureCanvas";
 
-export function Arena() {
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+const EL_COLORS: Record<string, string> = {
+  Coherence: "var(--el-coherence)",
+  Amplitude: "var(--el-amplitude)",
+  Phase: "var(--el-phase)",
+  Entropy: "var(--el-entropy)",
+  Topology: "var(--el-topology)",
+  Void: "var(--el-void)",
+  Prime: "var(--el-prime)",
+};
+
+type AnimPhase =
+  | "idle"
+  | "player-attack"
+  | "enemy-hit"
+  | "enemy-attack"
+  | "player-hit";
+
+interface DmgNum {
+  id: number;
+  value: number;
+  side: "player" | "enemy";
+}
+
+let dmgCounter = 0;
+
+export default function Arena() {
   const [entities, setEntities] = useState<any[]>([]);
   const [parasites, setParasites] = useState<any[]>([]);
-  const [selectedEntity, setSelectedEntity] = useState<string>("");
-  const [selectedParasite, setSelectedParasite] = useState<string>("");
+  const [selEntity, setSelEntity] = useState<any>(null);
+  const [selParasite, setSelParasite] = useState<any>(null);
   const [battle, setBattle] = useState<any>(null);
+  const [wallet, setWallet] = useState<any>(null);
+  const [anim, setAnim] = useState<AnimPhase>("idle");
+  const [damages, setDamages] = useState<DmgNum[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     Promise.all([getEntities(), getBestiary()]).then(([e, b]) => {
@@ -17,263 +54,441 @@ export function Arena() {
     });
   }, []);
 
-  const handleStartBattle = async () => {
-    if (!selectedEntity || !selectedParasite) return;
-    setLoading(true);
-    try {
-      const res = await startBattle(selectedEntity, selectedParasite);
-      setBattle(res.battle);
-    } catch (e: any) {
-      alert(e.message);
-    }
-    setLoading(false);
-  };
+  useEffect(() => {
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+  }, [battle?.log]);
 
+  const showDmg = useCallback((value: number, side: "player" | "enemy") => {
+    const id = ++dmgCounter;
+    setDamages((p) => [...p, { id, value, side }]);
+    setTimeout(() => setDamages((p) => p.filter((d) => d.id !== id)), 1400);
+  }, []);
+
+  // --- HANDLE ACTION with animation sequence ---
   const handleAction = async (action: string) => {
+    if (!battle) return;
     setLoading(true);
+    setError("");
+
+    const oldPlayerHP = battle.player.hp;
+    const oldEnemyHP = battle.enemy.hp;
+
     try {
+      // Player attack anim
+      setAnim("player-attack");
+      await wait(250);
+
+      // API call
       const res = await battleAction(action);
-      setBattle(res.battle);
+      const nb = res.battle;
+
+      // Damage calc
+      const playerDmg = oldEnemyHP - (nb.enemy?.hp ?? 0);
+      const enemyDmg = oldPlayerHP - (nb.player?.hp ?? 0);
+
+      // Enemy hit
+      setAnim("enemy-hit");
+      if (playerDmg > 0) showDmg(playerDmg, "enemy");
+      await wait(450);
+
+      // Enemy attacks back (if alive and not victory)
+      if (
+        nb.phase !== "VICTORY" &&
+        nb.phase !== "DEFEAT" &&
+        enemyDmg > 0
+      ) {
+        setAnim("enemy-attack");
+        await wait(250);
+        setAnim("player-hit");
+        if (enemyDmg > 0) showDmg(enemyDmg, "player");
+        await wait(450);
+      } else if (nb.phase === "DEFEAT" && enemyDmg > 0) {
+        setAnim("player-hit");
+        showDmg(enemyDmg, "player");
+        await wait(500);
+      }
+
+      // Settle
+      setAnim("idle");
+      setBattle(nb);
+      setWallet(res.wallet);
     } catch (e: any) {
-      alert(e.message);
+      setError(e.message);
+      setAnim("idle");
     }
     setLoading(false);
   };
 
-  // Pre-battle: selection screen
-  if (!battle) {
-    return (
-      <div style={{ padding: 32, maxWidth: 1000, margin: "0 auto" }}>
-        <h1 style={{ color: colors.primary, fontSize: 36, fontWeight: 800, textAlign: "center" }}>
-          ENTROPIC ARENA
-        </h1>
-        <p style={{ color: colors.textSecondary, textAlign: "center", marginBottom: 32 }}>
-          Choose your entity and face an entropic parasite.
-        </p>
+  const handleStart = async () => {
+    if (!selEntity || !selParasite) return;
+    setLoading(true);
+    setError("");
+    const pKey = selParasite.name.toLowerCase().replace(/ /g, "_");
+    try {
+      const res = await startBattle(selEntity.token_id, pKey);
+      setBattle(res.battle);
+    } catch (e: any) {
+      setError(e.message);
+    }
+    setLoading(false);
+  };
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
-          {/* Entity Selection */}
-          <div>
-            <h3 style={{ color: colors.text, marginBottom: 12 }}>Your Entity</h3>
-            {entities.map((e: any) => (
-              <div
-                key={e.token_id}
-                onClick={() => setSelectedEntity(e.token_id)}
-                style={{
-                  background: selectedEntity === e.token_id ? `${colors.primary}20` : colors.surface,
-                  border: `2px solid ${selectedEntity === e.token_id ? colors.primary : colors.border}`,
-                  borderRadius: 12,
-                  padding: 16,
-                  marginBottom: 8,
-                  cursor: "pointer",
-                }}
-              >
-                <div style={{ color: colors.text, fontWeight: 600 }}>{e.name}</div>
-                <div style={{ color: colors.textMuted, fontSize: 12 }}>
-                  η={e.stats.eta.toFixed(4)} · {e.stats.element} · Power {e.stats.power_rating}
-                </div>
+  const resetArena = () => {
+    setBattle(null);
+    setWallet(null);
+    setSelEntity(null);
+    setSelParasite(null);
+    setAnim("idle");
+    setError("");
+    getEntities().then((r) => setEntities(r.entities)).catch(() => {});
+  };
+
+  // ========= RESULT SCREEN =========
+  if (battle && (battle.phase === "VICTORY" || battle.phase === "DEFEAT")) {
+    const won = battle.phase === "VICTORY";
+    return (
+      <div>
+        <div className={`battle-result ${won ? "victory" : "defeat"}`}>
+          <h2>{won ? "VICTORY" : "DEFEAT"}</h2>
+
+          {/* Show creatures in final state */}
+          <div style={{ display: "flex", justifyContent: "center", gap: 60, margin: "20px 0 32px" }}>
+            {selEntity && (
+              <div className={won ? "creature-victory" : "creature-defeat"}>
+                <CreatureCanvas
+                  genes={selEntity.genes}
+                  element={selEntity.stats.element}
+                  rarity={selEntity.stats.rarity}
+                  size={160}
+                  animState={won ? "victory" : "defeat"}
+                />
               </div>
-            ))}
-            {entities.length === 0 && (
-              <p style={{ color: colors.textMuted }}>No entities. Mint one first!</p>
+            )}
+            {selParasite && (
+              <div className={won ? "creature-defeat" : "creature-victory"}>
+                <CreatureCanvas
+                  genes={parasiteGenes(selParasite.name)}
+                  isParasite
+                  tier={selParasite.tier}
+                  size={160}
+                  animState={won ? "defeat" : "victory"}
+                />
+              </div>
             )}
           </div>
 
-          {/* Parasite Selection */}
-          <div>
-            <h3 style={{ color: colors.text, marginBottom: 12 }}>Opponent</h3>
-            {parasites.map((p: any) => (
-              <div
-                key={p.name}
-                onClick={() => setSelectedParasite(p.name.toLowerCase().replace(/ /g, "_"))}
-                style={{
-                  background: selectedParasite === p.name.toLowerCase().replace(/ /g, "_") ? `${colors.danger}20` : colors.surface,
-                  border: `2px solid ${selectedParasite === p.name.toLowerCase().replace(/ /g, "_") ? colors.danger : colors.border}`,
-                  borderRadius: 12,
-                  padding: 16,
-                  marginBottom: 8,
-                  cursor: "pointer",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <div style={{ color: colors.text, fontWeight: 600 }}>{p.name}</div>
-                  <div style={{ color: colors.danger, fontSize: 12, fontWeight: 700 }}>
-                    Tier {p.tier}
-                  </div>
-                </div>
-                <div style={{ color: colors.textMuted, fontSize: 12 }}>
-                  η={p.eta} · HP {p.hp} · Weak: {p.weakness}
-                </div>
-                <div style={{ color: colors.textSecondary, fontSize: 11, marginTop: 4 }}>
-                  {p.description}
-                </div>
+          {won && (
+            <div className="reward-display">
+              <div className="reward-item">
+                <div className="reward-value">+{battle.vortex_earned}</div>
+                <div className="reward-label">$VORTEX</div>
               </div>
-            ))}
-          </div>
-        </div>
+              <div className="reward-item">
+                <div className="reward-value">+{battle.xp_earned}</div>
+                <div className="reward-label">XP</div>
+              </div>
+            </div>
+          )}
 
-        <div style={{ textAlign: "center", marginTop: 32 }}>
-          <button
-            onClick={handleStartBattle}
-            disabled={!selectedEntity || !selectedParasite || loading}
-            style={{
-              background: selectedEntity && selectedParasite ? colors.danger : colors.surfaceElevated,
-              color: colors.text,
-              border: "none",
-              borderRadius: 12,
-              padding: "16px 48px",
-              fontSize: 18,
-              fontWeight: 700,
-              cursor: selectedEntity && selectedParasite ? "pointer" : "not-allowed",
-            }}
-          >
-            {loading ? "Entering Arena..." : "ENTER THE ARENA"}
+          <button className="btn btn-primary" onClick={resetArena}>
+            Return to Arena
           </button>
         </div>
       </div>
     );
   }
 
-  // Active battle
-  const isOver = battle.phase === "VICTORY" || battle.phase === "DEFEAT";
-  const isPlayerTurn = battle.phase === "PLAYER_TURN";
+  // ========= BATTLE SCREEN =========
+  if (battle) {
+    const p = battle.player;
+    const e = battle.enemy;
+    const pHpPct = (p.hp / p.max_hp) * 100;
+    const eHpPct = (e.hp / e.max_hp) * 100;
+    const hpClass = pHpPct > 50 ? "healthy" : pHpPct > 20 ? "wounded" : "critical";
+    const isPlayerTurn = battle.phase === "PLAYER_TURN";
 
-  return (
-    <div style={{ padding: 32, maxWidth: 900, margin: "0 auto" }}>
-      <h2 style={{ color: colors.primary, textAlign: "center", marginBottom: 24 }}>
-        {isOver ? (battle.phase === "VICTORY" ? "VICTORY" : "DEFEAT") : `Turn ${battle.turn}`}
-      </h2>
+    // Creature anim states
+    const playerCreatureAnim =
+      anim === "player-attack" ? "attacking" : anim === "player-hit" ? "hit" : "idle";
+    const enemyCreatureAnim =
+      anim === "enemy-attack" ? "attacking" : anim === "enemy-hit" ? "hit" : "idle";
 
-      {/* Combatant Status */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 24, marginBottom: 32 }}>
-        {/* Player */}
-        <div style={{ background: colors.surface, borderRadius: 16, padding: 20, border: `1px solid ${colors.border}` }}>
-          <div style={{ color: colors.text, fontWeight: 700, fontSize: 18, marginBottom: 8 }}>{battle.player.name}</div>
-          <div style={{ color: colors.info, fontSize: 12, marginBottom: 8 }}>η = {battle.player.eta}</div>
-          <div style={{ background: colors.surfaceElevated, borderRadius: 6, height: 12, overflow: "hidden", marginBottom: 4 }}>
-            <div style={{
-              width: `${(battle.player.hp / battle.player.max_hp) * 100}%`,
-              height: "100%",
-              background: battle.player.hp / battle.player.max_hp > 0.5 ? colors.success : colors.danger,
-              borderRadius: 6,
-              transition: "width 0.3s",
-            }} />
-          </div>
-          <div style={{ color: colors.textMuted, fontSize: 12 }}>
-            HP: {battle.player.hp} / {battle.player.max_hp}
-          </div>
-          {battle.player.dread_stacks > 0 && (
-            <div style={{ color: colors.warning, fontSize: 12, marginTop: 4 }}>
-              Dread x{battle.player.dread_stacks}
+    // CSS classes for lunge/shake
+    const playerFrameClass =
+      anim === "player-attack"
+        ? "creature-lunge-right"
+        : anim === "player-hit"
+          ? "creature-shake"
+          : "creature-idle";
+    const enemyFrameClass =
+      anim === "enemy-attack"
+        ? "creature-lunge-left"
+        : anim === "enemy-hit"
+          ? "creature-shake"
+          : "creature-idle";
+
+    return (
+      <div>
+        <div className="battle-stage" style={{ position: "relative" }}>
+          <div className="battle-turn">Turn {battle.turn}</div>
+
+          {/* Floating damage numbers */}
+          {damages.map((d) => (
+            <div
+              key={d.id}
+              className={`damage-number on-${d.side}`}
+            >
+              -{d.value}
             </div>
+          ))}
+
+          <div className="combatants">
+            {/* Player */}
+            <div className="combatant-panel player glass">
+              <div className={`creature-frame ${playerFrameClass}`}>
+                {selEntity && (
+                  <CreatureCanvas
+                    genes={selEntity.genes}
+                    element={selEntity.stats.element}
+                    rarity={selEntity.stats.rarity}
+                    size={170}
+                    animState={playerCreatureAnim}
+                  />
+                )}
+              </div>
+              <div className="combatant-name" style={{ color: "var(--info)" }}>
+                {p.name}
+              </div>
+              <div className="combatant-eta" style={{ color: "var(--info)" }}>
+                {"\u03B7"} {typeof p.eta === "number" ? p.eta.toFixed(4) : p.eta}
+              </div>
+              {p.dread_stacks > 0 && (
+                <div className="dread-indicator">DREAD x{p.dread_stacks}</div>
+              )}
+              <div className="hp-bar-track">
+                <div className={`hp-bar-fill ${hpClass}`} style={{ width: `${pHpPct}%` }} />
+              </div>
+              <div className="hp-text">
+                {p.hp} / {p.max_hp}
+              </div>
+            </div>
+
+            <div className="vs-divider">VS</div>
+
+            {/* Enemy */}
+            <div className="combatant-panel enemy glass">
+              <div className={`creature-frame ${enemyFrameClass}`}>
+                {selParasite && (
+                  <CreatureCanvas
+                    genes={parasiteGenes(selParasite.name)}
+                    isParasite
+                    tier={selParasite.tier}
+                    size={170}
+                    animState={enemyCreatureAnim}
+                  />
+                )}
+              </div>
+              <div className="combatant-name" style={{ color: "var(--danger)" }}>
+                {e.name}
+              </div>
+              <div className="combatant-eta" style={{ color: "var(--danger)" }}>
+                {"\u03B7"} {typeof e.eta === "number" ? e.eta.toFixed(4) : e.eta}
+              </div>
+              <div className="hp-bar-track">
+                <div className="hp-bar-fill enemy-bar" style={{ width: `${eHpPct}%` }} />
+              </div>
+              <div className="hp-text">
+                {e.hp} / {e.max_hp}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        {isPlayerTurn && (
+          <div className="action-bar">
+            {[
+              { action: "attack", cls: "attack", label: "Attack" },
+              { action: "special", cls: "special", label: "Special" },
+              { action: "love_burst", cls: "love", label: "Love Burst" },
+              { action: "detune", cls: "detune", label: "Detune" },
+              { action: "guard", cls: "guard", label: "Guard" },
+            ].map(({ action, cls, label }) => (
+              <button
+                key={action}
+                className={`action-btn ${cls}`}
+                onClick={() => handleAction(action)}
+                disabled={loading}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {!isPlayerTurn && !loading && (
+          <div className="loading">Enemy turn...</div>
+        )}
+        {loading && anim !== "idle" && (
+          <div style={{ textAlign: "center", margin: "16px 0", fontFamily: "var(--font-display)", fontSize: 11, letterSpacing: "2px", color: "var(--text-muted)" }}>
+            ...
+          </div>
+        )}
+
+        {error && <div className="error-banner">{error}</div>}
+
+        {/* Compact combat log */}
+        <div className="combat-log-compact glass" ref={logRef}>
+          {battle.log.map((entry: any, i: number) => (
+            <div
+              key={i}
+              className={`log-entry ${
+                entry.actor === "player"
+                  ? "player-action"
+                  : entry.actor === "system"
+                    ? "system-action"
+                    : "enemy-action"
+              }`}
+            >
+              {entry.damage > 0 && (
+                <span className="log-damage">{entry.damage} dmg</span>
+              )}
+              {entry.effect && (
+                <>
+                  {entry.damage > 0 ? " — " : ""}
+                  <span className="log-effect">{entry.effect}</span>
+                </>
+              )}
+              {entry.flavor_text && (
+                <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>
+                  {entry.flavor_text}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ========= SELECTION SCREEN =========
+  return (
+    <div>
+      <div className="arena-header">
+        <h1 className="arena-title">ARENA</h1>
+        <p style={{ color: "var(--text-secondary)", marginTop: 8, fontSize: 14 }}>
+          Choose your entity and face an entropic parasite
+        </p>
+      </div>
+
+      {error && <div className="error-banner">{error}</div>}
+
+      <div className="select-grid">
+        {/* Entity Selection */}
+        <div className="select-panel glass">
+          <h3>Your Entity</h3>
+          {entities.length === 0 ? (
+            <div style={{ color: "var(--text-muted)", padding: 20, textAlign: "center", fontSize: 13 }}>
+              No entities. Mint one first.
+            </div>
+          ) : (
+            entities.map((e) => (
+              <div
+                key={e.token_id}
+                className={`select-option ${selEntity?.token_id === e.token_id ? "selected" : ""}`}
+                onClick={() => setSelEntity(e)}
+                style={{ display: "flex", gap: 12, alignItems: "center" }}
+              >
+                <CreatureCanvas
+                  genes={e.genes}
+                  element={e.stats.element}
+                  rarity={e.stats.rarity}
+                  size={52}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>{e.name}</div>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: "var(--text-secondary)",
+                      display: "flex",
+                      gap: 10,
+                      fontFamily: "var(--font-display)",
+                      letterSpacing: "0.5px",
+                    }}
+                  >
+                    <span style={{ color: EL_COLORS[e.stats.element] }}>{e.stats.element}</span>
+                    <span>{"\u03B7"} {e.stats.eta.toFixed(3)}</span>
+                    <span>PWR {e.stats.power_rating}</span>
+                  </div>
+                </div>
+              </div>
+            ))
           )}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", color: colors.textMuted, fontSize: 32 }}>VS</div>
-
-        {/* Enemy */}
-        <div style={{ background: colors.surface, borderRadius: 16, padding: 20, border: `1px solid ${colors.danger}40` }}>
-          <div style={{ color: colors.danger, fontWeight: 700, fontSize: 18, marginBottom: 8 }}>{battle.enemy.name}</div>
-          <div style={{ color: colors.danger, fontSize: 12, marginBottom: 8, opacity: 0.7 }}>η = {battle.enemy.eta}</div>
-          <div style={{ background: colors.surfaceElevated, borderRadius: 6, height: 12, overflow: "hidden", marginBottom: 4 }}>
-            <div style={{
-              width: `${(battle.enemy.hp / battle.enemy.max_hp) * 100}%`,
-              height: "100%",
-              background: colors.danger,
-              borderRadius: 6,
-              transition: "width 0.3s",
-            }} />
-          </div>
-          <div style={{ color: colors.textMuted, fontSize: 12 }}>
-            HP: {battle.enemy.hp} / {battle.enemy.max_hp}
-          </div>
+        {/* Parasite Selection */}
+        <div className="select-panel glass">
+          <h3>Opponent</h3>
+          {parasites.map((p) => (
+            <div
+              key={p.name}
+              className={`select-option ${selParasite?.name === p.name ? "selected-enemy" : ""}`}
+              onClick={() => setSelParasite(p)}
+              style={{ display: "flex", gap: 12, alignItems: "center" }}
+            >
+              <CreatureCanvas
+                genes={parasiteGenes(p.name)}
+                isParasite
+                tier={p.tier}
+                size={52}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
+                  <span style={{ fontWeight: 700, color: "var(--danger)", fontSize: 14 }}>{p.name}</span>
+                  <span style={{ fontSize: 9, color: "var(--text-muted)", fontFamily: "var(--font-display)", letterSpacing: "1px" }}>
+                    T{p.tier}
+                  </span>
+                </div>
+                <div style={{ fontSize: 10, color: "var(--text-secondary)", display: "flex", gap: 10, fontFamily: "var(--font-display)", letterSpacing: "0.5px" }}>
+                  <span>{"\u03B7"} {p.eta}</span>
+                  <span>HP {p.hp}</span>
+                  <span style={{ color: "var(--warning)" }}>{p.weakness}</span>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Actions */}
-      {isPlayerTurn && !isOver && (
-        <div style={{ display: "flex", gap: 12, justifyContent: "center", marginBottom: 24 }}>
-          {[
-            { action: "attack", label: "Attack", color: colors.danger },
-            { action: "special", label: "Special", color: colors.accent },
-            { action: "love_burst", label: "Love Burst", color: "#ff69b4" },
-            { action: "detune", label: "Detune", color: colors.primary },
-            { action: "guard", label: "Guard", color: colors.info },
-          ].map(({ action, label, color }) => (
-            <button
-              key={action}
-              onClick={() => handleAction(action)}
-              disabled={loading}
-              style={{
-                background: `${color}20`,
-                color,
-                border: `1px solid ${color}40`,
-                borderRadius: 10,
-                padding: "12px 20px",
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              {label}
-            </button>
-          ))}
+      {/* Preview selected matchup */}
+      {selEntity && selParasite && (
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 40, margin: "24px 0 8px" }}>
+          <CreatureCanvas
+            genes={selEntity.genes}
+            element={selEntity.stats.element}
+            rarity={selEntity.stats.rarity}
+            size={120}
+          />
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 18, color: "var(--text-muted)", letterSpacing: "4px" }}>VS</div>
+          <CreatureCanvas
+            genes={parasiteGenes(selParasite.name)}
+            isParasite
+            tier={selParasite.tier}
+            size={120}
+          />
         </div>
       )}
 
-      {/* Victory/Defeat */}
-      {isOver && (
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          {battle.phase === "VICTORY" && (
-            <div style={{ color: colors.success, fontSize: 18, marginBottom: 8 }}>
-              +{battle.vortex_earned} $VORTEX · +{battle.xp_earned} XP
-            </div>
-          )}
-          <button
-            onClick={() => setBattle(null)}
-            style={{
-              background: colors.primary,
-              color: colors.bg,
-              border: "none",
-              borderRadius: 12,
-              padding: "14px 32px",
-              fontSize: 16,
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            Return to Arena
-          </button>
-        </div>
-      )}
-
-      {/* Combat Log */}
-      <div style={{ background: colors.surface, borderRadius: 16, padding: 20, border: `1px solid ${colors.border}` }}>
-        <h3 style={{ color: colors.text, marginBottom: 12, fontSize: 14 }}>Combat Log</h3>
-        <div style={{ maxHeight: 300, overflow: "auto" }}>
-          {[...battle.log].reverse().map((entry: any, i: number) => (
-            <div key={i} style={{
-              padding: "8px 0",
-              borderBottom: `1px solid ${colors.border}`,
-              fontSize: 13,
-            }}>
-              <div style={{ color: colors.textSecondary }}>
-                <span style={{ color: entry.actor === "system" ? colors.primary : colors.text, fontWeight: 600 }}>
-                  {entry.actor}
-                </span>
-                {entry.damage > 0 && (
-                  <span style={{ color: colors.danger, marginLeft: 8 }}>-{entry.damage} HP</span>
-                )}
-                {entry.effect && (
-                  <span style={{ color: colors.textMuted, marginLeft: 8, fontSize: 11 }}>{entry.effect}</span>
-                )}
-              </div>
-              <div style={{ color: colors.textMuted, fontSize: 11, fontStyle: "italic", marginTop: 2 }}>
-                {entry.flavor_text}
-              </div>
-            </div>
-          ))}
-        </div>
+      <div style={{ textAlign: "center", marginTop: 20 }}>
+        <button
+          className="btn btn-danger"
+          onClick={handleStart}
+          disabled={!selEntity || !selParasite || loading}
+          style={{ padding: "16px 48px", fontSize: 13, letterSpacing: "3px" }}
+        >
+          {loading ? "Entering..." : "Enter Battle"}
+        </button>
       </div>
     </div>
   );
